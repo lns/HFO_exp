@@ -1,0 +1,264 @@
+# Enter your network definition here.
+# Use Shift+Enter to update the visualization.
+name: "HFO Net"
+force_backward: true
+layer {
+  name: "vec_fea"
+  type: "Input"
+  top: "vec_fea"
+  input_param {
+    shape {
+      dim: 1
+      dim: 59
+      dim: 1
+      dim: 1
+    }
+  }
+}
+layer {
+  name: "dis_label"
+  type: "Input"
+  top: "dis_label"
+  input_param {
+    shape {
+      dim: 1
+      dim: 1
+      dim: 1
+      dim: 1
+    }
+  }
+}
+layer {
+  name: "cnt_label"
+  type: "Input"
+  top: "cnt_label"
+  input_param {
+    shape {
+      dim: 1
+      dim: 2
+      dim: 1
+      dim: 1
+    }
+  }
+}
+layer {
+  name: "vec_value"
+  type: "Input"
+  top: "vec_value"
+  input_param {
+    shape {
+      dim: 1
+      dim: 1
+      dim: 1
+      dim: 1
+    }
+  }
+}
+layer {
+  name: "log_prob"
+  type: "Input"
+  top: "log_prob"
+  input_param {
+    shape {
+      dim: 1
+      dim: 1
+      dim: 1
+      dim: 1
+    }
+  }
+}
+layer {
+  bottom: "vec_fea"
+  top:  "fc1"
+  name: "fc1"
+  type: "InnerProduct"
+  inner_product_param {
+    num_output: 64
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+      value: 0
+    }
+  }
+}
+layer {
+  bottom: "fc1"
+  top:  "fc1"
+  name: "elu1"
+  type: "ELU"
+}
+layer {
+  bottom: "fc1"
+  top:  "fc2"
+  name: "fc2"
+  type: "InnerProduct"
+  inner_product_param {
+    num_output: 64
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+      value: 0
+    }
+  }
+}
+layer {
+  bottom: "fc2"
+  top:  "fc2"
+  name: "elu2"
+  type: "ELU"
+}
+layer {
+  bottom: "fc2"
+  top:  "fea"
+  name: "fea"
+  type: "InnerProduct"
+  inner_product_param {
+    num_output: 64
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+      value: 0
+    }
+  }
+}
+layer {
+  bottom: "fea"
+  top:  "fea"
+  name: "elu3"
+  type: "ELU"
+}
+layer {
+  bottom: "fea"
+  top:  "fc_dis_1"
+  name: "fc_dis_1"
+  type: "InnerProduct"
+  inner_product_param {
+    num_output: 32
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+      value: 0
+    }
+  }
+}
+layer {
+  bottom: "fc_dis_1"
+  top:  "fc_dis_1"
+  name: "elu_dis_1"
+  type: "ELU"
+}
+layer {
+  bottom: "fc_dis_1"
+  top:  "fc_dis_2"
+  name: "fc_dis_2"
+  type: "InnerProduct"
+  inner_product_param {
+    num_output: 3
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+      value: 0
+    }
+  }
+}
+layer {
+  bottom: "fea"
+  top:  "fc_cnt_1"
+  name: "fc_cnt_1"
+  type: "InnerProduct"
+  inner_product_param {
+    num_output: 32
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+      value: 0
+    }
+  }
+}
+layer {
+  bottom: "fc_cnt_1"
+  top:  "fc_cnt_1"
+  name: "elu_cnt_1"
+  type: "ELU"
+}
+layer {
+  bottom: "fc_cnt_1"
+  top:  "cnt_pred"
+  name: "cnt_pred"
+  type: "InnerProduct"
+  inner_product_param {
+    num_output: 6
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+      value: 0
+    }
+  }
+}
+layer {
+  bottom: "fea"
+  top: "fc_val_1"
+  name: "fc_val_1"
+  type: "InnerProduct"
+  inner_product_param {
+    num_output: 32
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+      value: 0
+    }
+  }
+}
+layer {
+  bottom: "fc_val_1"
+  top:  "fc_val_1"
+  name: "elu_val_1"
+  type: "ELU"
+}
+layer {
+  bottom: "fc_val_1"
+  top:  "val_pred"
+  name: "val_pred"
+  type: "InnerProduct"
+  inner_product_param {
+    num_output: 1
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+      value: 0
+    }
+  }
+}
+layer {
+  bottom: "fc_dis_2"
+  top:  "dis_pred"
+  name: "dis_pred"
+  type: "Softmax"
+}
+# Bellman Loss
+layer {
+  bottom: "val_pred"
+  bottom: "vec_value"
+  top: "square_loss"
+  name: "square_loss"
+  type: "EuclideanLoss"
+  loss_weight: 10
+}
