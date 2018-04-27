@@ -83,3 +83,7 @@ soccerwindow2-prefix/
 # Logs
 log/
 bin/log/
+
+# Data/Model
+*.csv
+*.caffemodel
