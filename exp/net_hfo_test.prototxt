@@ -3,9 +3,9 @@
 name: "HFO Net"
 force_backward: true
 layer {
-  name: "vec_fea"
+  name: "prev_s"
   type: "Input"
-  top: "vec_fea"
+  top: "prev_s"
   input_param {
     shape {
       dim: 1
@@ -16,9 +16,22 @@ layer {
   }
 }
 layer {
-  name: "dis_label"
+  name: "prev_a"
   type: "Input"
-  top: "dis_label"
+  top: "prev_a"
+  input_param {
+    shape {
+      dim: 1
+      dim: 3
+      dim: 1
+      dim: 1
+    }
+  }
+}
+layer {
+  name: "prev_r"
+  type: "Input"
+  top: "prev_r"
   input_param {
     shape {
       dim: 1
@@ -29,22 +42,9 @@ layer {
   }
 }
 layer {
-  name: "cnt_label"
+  name: "prev_p"
   type: "Input"
-  top: "cnt_label"
-  input_param {
-    shape {
-      dim: 1
-      dim: 2
-      dim: 1
-      dim: 1
-    }
-  }
-}
-layer {
-  name: "vec_value"
-  type: "Input"
-  top: "vec_value"
+  top: "prev_p"
   input_param {
     shape {
       dim: 1
@@ -55,9 +55,9 @@ layer {
   }
 }
 layer {
-  name: "log_prob"
+  name: "prev_v"
   type: "Input"
-  top: "log_prob"
+  top: "prev_v"
   input_param {
     shape {
       dim: 1
@@ -68,7 +68,7 @@ layer {
   }
 }
 layer {
-  bottom: "vec_fea"
+  bottom: "prev_s"
   top:  "fc1"
   name: "fc1"
   type: "InnerProduct"
@@ -252,13 +252,4 @@ layer {
   top:  "dis_pred"
   name: "dis_pred"
   type: "Softmax"
-}
-# Bellman Loss
-layer {
-  bottom: "val_pred"
-  bottom: "vec_value"
-  top: "square_loss"
-  name: "square_loss"
-  type: "EuclideanLoss"
-  loss_weight: 10
 }

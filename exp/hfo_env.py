@@ -22,7 +22,7 @@ class HFOEnv():
     def __init__(self, port):
         untouched_time = 100  # end the game if no one touch the ball in untouched-time frames
         self.frames_per_trial = 500  # maximal length of game
-        
+      
         cmd = hfo_path + "/bin/HFO --offense-agents 1 --fullstate --headless --port {} --untouched-time {} --frames-per-trial {}".format(port, untouched_time, self.frames_per_trial)
         print('Starting server with command: %s' % cmd)
         self.server_process = subprocess.Popen(cmd.split(' '), shell=False)
@@ -36,7 +36,7 @@ class HFOEnv():
     def reset(self):
         if not self.init:
             self.hfo.connectToServer(LOW_LEVEL_FEATURE_SET,
-                      '/home/qing/ext/HFO/bin/teams/base/config/formations-dt', self.port,
+                      hfo_path+'/bin/teams/base/config/formations-dt', self.port,
                       'localhost', 'base_left', False)
             self.init = True
         self.status = IN_GAME
@@ -123,9 +123,15 @@ class HFOEnv():
             return -1
 
 def transform_state(rem, obs):
-    assert(rem.state_size == obs.size)
+    buf = np.getbuffer(obs)
+    if rem.state_size != obs.size * 4: # sizeof(uint8), sizeof(float)
+      print "%d != %d" % (rem.state_size, obs.size * 4)
+    assert(rem.state_size == obs.size * 4)
+    assert(rem.state_size == len(buf))
     assert(obs.dtype == np.float32)
-    return obs
+    # Reinterpret as np.uint8 array
+    s = np.frombuffer(buf, dtype=np.uint8)
+    return s
 
 def transform_label(rem, act, rwd, logp):
     assert(len(act) == 7)
@@ -144,26 +150,20 @@ def transform_label(rem, act, rwd, logp):
     p[0] = logp
     return (a,r,p)
 
-def train(mdl_file, port, rem_port):
+def train(mdl_file, port, rem_port, capacity, max_episode, push_time_interval, sync_model):
     print([IN_GAME, GOAL, CAPTURED_BY_DEFENSE, OUT_OF_BOUNDS, OUT_OF_TIME, SERVER_DOWN])
     # Agent
     #agt=RuleAgent()
     random_agt=RandomAgent()
-    agt=RoboAgent(".", "net_hfo.prototxt", mdl_file)
+    ip = "100.102.32.6"
+    agt=RoboAgent(".", "net_hfo_test.prototxt", mdl_file, ip=ip, port=rem_port,
+        capacity=capacity, max_episode=max_episode, push_time_interval=push_time_interval, sync_model=sync_model)
     agt.pdtr.sd = [1.0]*6 # OPTION 1
     agt.pdtr.temperature = 5.0
-    # SyncManager
-    threads = []
-    threads.append(Thread(target=agt.pdtr.sub_worker_main, args=("tcp://100.102.32.6:"+str(rem_port), 0))) # 0 for Conn
-    for th in threads:
-      th.daemon = True
-      #th.start() # OPTION 2
     # Memoire
-    client = ReplayMemoryClient("tcp://100.102.32.6:"+str(rem_port+1), "tcp://100.102.32.6:"+str(rem_port+2), 1)
+    client = agt.client
     rem = client.prm
-    rem.print_info()
-    rem.discount_factor = 0.99
-    s = np.ndarray((rem.state_size), dtype=np.float32)
+    s = np.ndarray((rem.state_size), dtype=np.uint8)
     a = np.ndarray((rem.action_size),dtype=np.float32)
     r = np.ndarray((rem.reward_size),dtype=np.float32)
     #
@@ -172,48 +172,44 @@ def train(mdl_file, port, rem_port):
     agt.reset()
     random_agt.reset()
     game_num=0
-    epi_idx = rem.new_episode()
+    rem.new_episode()
     while True:
         epsilon = 0 #max(0.01, 0.2 - float(game_num) / 10000.0)
         #sigma = 1.0 #max(0.1, 0.5 - 0.5 * float(game_num) / 50000.0)
         #agt.pdtr.sd = [sigma]*6
         s = transform_state(rem, obs)
         if random() < epsilon:
-          action,logp = random_agt.act(obs)
+          action,logp,v = random_agt.act(obs)
         else:
-          action,logp = agt.act(obs)
+          action,logp,v = agt.act(obs)
         obs,rwd,terminal,info = hfo.step(action)
         a,r,p = transform_label(rem, action, rwd, logp)
-        rem.add_entry(epi_idx, s, a, r, p)
+        rem.add_entry(s, a, r, p, v, 1.0)
         if terminal:
-            rem.close_episode(epi_idx)
-            client.push_episode_to_remote(epi_idx)
+            rem.close_episode()
+            client.update_counter()
             obs = hfo.reset()
             agt.reset()
             random_agt.reset()
             game_num+=1
-            epi_idx = rem.new_episode()
+            rem.new_episode()
     os.system("killall -9 rcssserver")
 
-def test(mdl_file, port, rem_port):
+def test(mdl_file, port, rem_port, capacity, max_episode, push_time_interval, sync_model):
     # Agent
-    agt=RoboAgent(".", "net_hfo.prototxt", mdl_file)
+    ip = "100.102.32.6"
+    agt=RoboAgent(".", "net_hfo_test.prototxt", mdl_file, ip=ip, port=rem_port,
+        capacity=capacity, max_episode=max_episode, push_time_interval=push_time_interval, sync_model=sync_model)
     #agt.pdtr.scale = [1.0,0.1,1.0]
-    agt.pdtr.sd = [0.2]*6
+    agt.pdtr.sd = [0.0]*6
     agt.pdtr.temperature = 1.0
-    #
-    threads = []
-    threads.append(Thread(target=agt.pdtr.sub_worker_main, args=("tcp://100.102.32.6:"+str(rem_port), 0))) # 0 for Conn
-    for th in threads:
-      th.daemon = True
-      th.start()
     #
     hfo=HFOEnv(int(port))
     obs = hfo.reset()
     agt.reset()
     game_num=0
     while True:
-        action,logp = agt.act(obs)
+        action,logp,v = agt.act(obs)
         obs,rwd,terminal,info = hfo.step(action)
         if terminal:
             obs = hfo.reset()
@@ -223,11 +219,14 @@ def test(mdl_file, port, rem_port):
 
 if __name__ == '__main__':
   import sys
-  if len(sys.argv) < 4:
-    print("Usage: %s [train|test] model_file port rem_port" % sys.argv[0])
+  if len(sys.argv) < 5:
+    print("Usage: %s [train|test] model_file port rem_port sync_model" % sys.argv[0])
     exit(0)
   if sys.argv[1] == 'train':
-    train(sys.argv[2], sys.argv[3], int(sys.argv[4]))
+    train(mdl_file=sys.argv[2], port=sys.argv[3], rem_port=int(sys.argv[4]),
+        capacity=65536, max_episode=32, push_time_interval=0.1, sync_model=int(sys.argv[5]))
   elif sys.argv[1] == 'test':
-    test(sys.argv[2], sys.argv[3], int(sys.argv[4]))
+    print("argv[5]" + str(sys.argv[5]))
+    test(mdl_file=sys.argv[2], port=sys.argv[3], rem_port=int(sys.argv[4]),
+        capacity=65536, max_episode=32, push_time_interval=-1.0, sync_model=int(sys.argv[5]))
 
