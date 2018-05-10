@@ -46,7 +46,7 @@ class HFOEnv():
             if self.status==IN_GAME:
                 if obs[50]==1:
                     break
-            self.status = self.hfo.step() 
+            self.status = self.hfo.step()
         self.obs=obs
         self.got_kickable_reward=False
         self.ball_proximity, self.ball_dist_goal, self.kickable = self.ext(obs)
@@ -150,16 +150,23 @@ def transform_label(rem, act, rwd, logp):
     p[0] = logp
     return (a,r,p)
 
-def train(mdl_file, port, rem_port, capacity, max_episode, push_time_interval, sync_model):
+def train(mdl_file, port, rem_port, capacity, max_episode, push_time_interval, sync_model, mode, epsilon):
     print([IN_GAME, GOAL, CAPTURED_BY_DEFENSE, OUT_OF_BOUNDS, OUT_OF_TIME, SERVER_DOWN])
     # Agent
-    #agt=RuleAgent()
-    random_agt=RandomAgent()
     ip = "100.102.32.6"
-    agt=RoboAgent(".", "net_hfo_test.prototxt", mdl_file, ip=ip, port=rem_port,
+    agt = RoboAgent(".", "net_hfo_test.prototxt", mdl_file, ip=ip, port=rem_port,
         capacity=capacity, max_episode=max_episode, push_time_interval=push_time_interval, sync_model=sync_model)
-    agt.pdtr.sd = [1.0]*6 # OPTION 1
-    agt.pdtr.temperature = 5.0
+    #offagt = RoboAgent(".", "net_hfo_test.prototxt", "il%3.1f.caffemodel" % epsilon, ip='NULL', port=0,
+    #    capacity=0, max_episode=0, push_time_interval=-1, sync_model=0)
+    rule_agt = RuleAgent()
+    if mode == 'IL':
+      agt.pdtr.sd = [0.2]*6
+      agt.pdtr.temperature = 1.0
+    elif mode == 'RL':
+      agt.pdtr.sd = [0.2]*6
+      agt.pdtr.temperature = 1.0
+    else:
+      print('Unknown mode: %s' % mode)
     # Memoire
     client = agt.client
     rem = client.prm
@@ -170,33 +177,33 @@ def train(mdl_file, port, rem_port, capacity, max_episode, push_time_interval, s
     hfo=HFOEnv(int(port))
     obs = hfo.reset()
     agt.reset()
-    random_agt.reset()
+    rule_agt.reset()
     game_num=0
     rem.new_episode()
     while True:
-        epsilon = 0 #max(0.01, 0.2 - float(game_num) / 10000.0)
-        #sigma = 1.0 #max(0.1, 0.5 - 0.5 * float(game_num) / 50000.0)
-        #agt.pdtr.sd = [sigma]*6
-        s = transform_state(rem, obs)
-        if random() < epsilon:
-          action,logp,v = random_agt.act(obs)
-        else:
-          action,logp,v = agt.act(obs)
-        obs,rwd,terminal,info = hfo.step(action)
-        a,r,p = transform_label(rem, action, rwd, logp)
-        rem.add_entry(s, a, r, p, v, 1.0)
-        if terminal:
-            rem.close_episode()
-            client.update_counter()
-            obs = hfo.reset()
-            agt.reset()
-            random_agt.reset()
-            game_num+=1
-            rem.new_episode()
+      s = transform_state(rem, obs)
+      if random() > epsilon:
+        action,logp,v = agt.act(obs)
+        logp += math.log(1-epsilon)
+      else:
+        action,logp,v = rule_agt.act(obs)
+        logp += math.log(epsilon)
+      #_, est_logp, _ = offagt.act(obs)
+      obs,rwd,terminal,info = hfo.step(action)
+      a,r,p = transform_label(rem, action, rwd, logp)
+      rem.add_entry(s, a, r, logp, v, 1.0) # logp or est_logp
+      if terminal:
+        rem.close_episode()
+        client.update_counter()
+        obs = hfo.reset()
+        agt.reset()
+        rule_agt.reset()
+        game_num+=1
+        rem.new_episode()
     os.system("killall -9 rcssserver")
 
-def test(mdl_file, port, rem_port, capacity, max_episode, push_time_interval, sync_model):
-    # Agent
+def test(mdl_file, port, rem_port, capacity, max_episode, push_time_interval, sync_model, mode, epsilon):
+  # Agent
     ip = "100.102.32.6"
     agt=RoboAgent(".", "net_hfo_test.prototxt", mdl_file, ip=ip, port=rem_port,
         capacity=capacity, max_episode=max_episode, push_time_interval=push_time_interval, sync_model=sync_model)
@@ -219,14 +226,15 @@ def test(mdl_file, port, rem_port, capacity, max_episode, push_time_interval, sy
 
 if __name__ == '__main__':
   import sys
-  if len(sys.argv) < 5:
-    print("Usage: %s [train|test] model_file port rem_port sync_model" % sys.argv[0])
+  if len(sys.argv) < 7:
+    print("Usage: %s [train|test] model_file port rem_port sync_model mode epsilon" % sys.argv[0])
     exit(0)
   if sys.argv[1] == 'train':
     train(mdl_file=sys.argv[2], port=sys.argv[3], rem_port=int(sys.argv[4]),
-        capacity=65536, max_episode=32, push_time_interval=0.1, sync_model=int(sys.argv[5]))
+        capacity=65536, max_episode=32, push_time_interval=1.0, sync_model=int(sys.argv[5]), mode=sys.argv[6],
+        epsilon=float(sys.argv[7]))
   elif sys.argv[1] == 'test':
-    print("argv[5]" + str(sys.argv[5]))
     test(mdl_file=sys.argv[2], port=sys.argv[3], rem_port=int(sys.argv[4]),
-        capacity=65536, max_episode=32, push_time_interval=-1.0, sync_model=int(sys.argv[5]))
+        capacity=65536, max_episode=32, push_time_interval=-1.0, sync_model=int(sys.argv[5]), mode=sys.argv[6],
+        epsilon=float(sys.argv[7]))
 

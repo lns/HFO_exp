@@ -54,7 +54,6 @@ class RandomAgent(object):
 
 class RoboAgent(object):
   def __init__(self, model_dir, model_prototxt, caffe_model, ip, port, capacity, max_episode, push_time_interval, sync_model):
-    print(sync_model)
     self.pdtr = latte.Predictor()
     self.pdtr.SetModelFile(model_dir + '/' + model_prototxt, model_dir + '/' + caffe_model)
     self.pdtr.ReadDimConfig(model_dir + '/dim_config.txt')
