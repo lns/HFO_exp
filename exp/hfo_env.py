@@ -158,6 +158,8 @@ def train(mdl_file, port, rem_port, capacity, max_episode, push_time_interval, s
         capacity=capacity, max_episode=max_episode, push_time_interval=push_time_interval, sync_model=sync_model)
     #offagt = RoboAgent(".", "net_hfo_test.prototxt", "il%3.1f.caffemodel" % epsilon, ip='NULL', port=0,
     #    capacity=0, max_episode=0, push_time_interval=-1, sync_model=0)
+    perfagt = RoboAgent(".", "net_hfo_test.prototxt", "perfect.caffemodel", ip='NULL', port=0,
+        capacity=0, max_episode=0, push_time_interval=-1, sync_model=0)
     rule_agt = RuleAgent()
     if mode == 'IL':
       agt.pdtr.sd = [0.2]*6
@@ -186,7 +188,7 @@ def train(mdl_file, port, rem_port, capacity, max_episode, push_time_interval, s
         action,logp,v = agt.act(obs)
         logp += math.log(1-epsilon)
       else:
-        action,logp,v = rule_agt.act(obs)
+        action,logp,v = perfagt.act(obs)
         logp += math.log(epsilon)
       #_, est_logp, _ = offagt.act(obs)
       obs,rwd,terminal,info = hfo.step(action)
